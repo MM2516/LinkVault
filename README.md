@@ -205,10 +205,51 @@ npm run build
 - File size limit: `5MB`
 - Cleanup interval: `60 seconds`
 
-## Future Improvements
+## Design Decisions
 
-- JWT with expiry and refresh flow.
-- Email verification and password reset.
-- Rate limiting on auth and link access endpoints.
-- Better audit logs and metrics.
-- Docker compose setup for one-command local run.
+1. Guest-first sharing with optional accounts
+- Core upload/retrieval flows do not require login.
+- Logged-in users get dashboard ownership and tracking.
+
+2. Password protection at link level
+- Link passwords are hashed with bcrypt (`password_hash`) and never stored in plaintext.
+- Password checks are enforced independently from account login.
+
+3. Usage semantics by content type
+- Text link accesses increment on `GET /api/content/:id`.
+- File accesses increment only on successful `GET /api/download/:id`.
+
+4. Soft cleanup for expired/consumed files
+- Background job runs every 60 seconds.
+- For file links, expired or limit-reached files are removed from disk.
+- DB row is retained for dashboard history by setting `content = NULL`.
+
+5. Simple session persistence
+- Tokens are random IDs stored in `sessions` table.
+- Frontend persists token in `localStorage`.
+
+## Assumptions and Limitations
+
+1. Local-development defaults
+- Backend and frontend API URLs are hardcoded to localhost values in frontend code.
+- Backend listens on port `5000` directly.
+
+2. Limited production hardening
+- No rate limiting, CAPTCHA, or abuse controls.
+- No CSRF protections needed for current token-header pattern, but broader hardening is not implemented.
+
+3. Session model
+- Session tokens do not have explicit expiry.
+- A token remains valid until manual logout or database reset.
+
+4. File handling constraints
+- Max upload size is 5 MB.
+- Allowed MIME types are restricted (images, PDF, ZIP, TXT, DOC, DOCX).
+
+5. Database path consistency
+- Current code opens SQLite via relative path in `backend/config/database.js` (`./linkvault.db`).
+- Any `.env` DB path value is currently not used by active server code.
+
+6. Architecture scope
+- API logic is implemented directly in `backend/index.js`.
+- `backend/routes` and `backend/controllers` include older modular code not used by the running server entrypoint.
