@@ -17,54 +17,16 @@ The stack is:
 
 ## Features
 
-### Core Vault Features
-- Create text links and file links.
-- Optional password per link (stored as bcrypt hash).
-- Expiry date support.
-- View/download limit support.
-- One-time access mode.
-- Manual link deletion.
-
-### Authentication (Optional)
-- Register and login with email/password.
-- Session token-based auth (`Bearer <token>`).
-- Logout endpoint.
-- Guest flow remains fully supported.
-
-### Dashboard
-- Logged-in users can view their own generated links.
-- Shows link type, status, views/downloads, expiry, creation time.
-- Keeps expired/limit-reached records for history.
-
-### Cleanup Job
-- Runs every 60 seconds.
-- Removes expired/over-limit file blobs from disk.
-- Preserves DB record for dashboard history.
-
-## Project Structure
-
-```text
-linkvault/
-├── backend/
-│   ├── config/
-│   │   └── database.js
-│   ├── uploads/
-│   ├── index.js
-│   ├── package.json
-│   └── linkvault.db
-├── frontend/
-│   ├── src/
-│   │   ├── pages/
-│   │   │   ├── Home.jsx
-│   │   │   ├── ViewContent.jsx
-│   │   │   └── Dashboard.jsx
-│   │   ├── App.jsx
-│   │   └── main.jsx
-│   ├── package.json
-│   └── vite.config.js
-└── README.md
-```
-
+- Upload **either text or a file** per link
+- Secure, hard-to-guess shareable URLs
+- Optional expiry time
+- Optional password-protected links
+- Optional view/download limits
+- One-time access links
+- Guest usage without login
+- Authenticated dashboard for link history
+- Background cleanup of expired content
+  
 ## Prerequisites
 
 - Node.js 18+ recommended
@@ -117,22 +79,19 @@ Frontend runs at: `http://localhost:5173`
 - Access endpoints require correct `x-link-password` header when link is protected.
 - Login status does **not** bypass link password.
 
-## API Reference
+## API OVERVIEW
 
 Base URL: `http://localhost:5000`
 
 ### Auth
 - `POST /api/auth/register`
-  - body: `{ "email": "...", "password": "..." }`
 - `POST /api/auth/login`
-  - body: `{ "email": "...", "password": "..." }`
 - `GET /api/auth/me`
-  - header: `Authorization: Bearer <token>`
 - `POST /api/auth/logout`
-  - header: `Authorization: Bearer <token>`
 
-### Vault
+### Link & Content APIs
 - `POST /api/upload`
+  - Creates a new text or file link with optional expiry, password and access limits.
   - multipart fields:
     - `type`: `text` or `file`
     - `text` (if `type=text`)
@@ -144,16 +103,16 @@ Base URL: `http://localhost:5000`
   - optional header: `Authorization: Bearer <token>`
 
 - `GET /api/content/:id`
-  - optional header: `x-link-password`
+  - Retrieves shared text content.
 
 - `GET /api/download/:id`
-  - optional header: `x-link-password`
+  - Downloads shared file content.
 
 - `DELETE /api/delete/:id`
-  - optional header: `x-link-password`
+  - Deletes a link and associated content.
 
 - `GET /api/my-links`
-  - header: `Authorization: Bearer <token>`
+  - Returns link history for authenticated users.
 
 ## Database Schema
 
@@ -182,74 +141,33 @@ SQLite DB: `backend/linkvault.db`
 - `current_views`
 - `created_at`
 
-## Security Notes
-
-- Passwords are never stored in plain text.
-- Link passwords are hashed with bcrypt.
-- User auth is token-based using session tokens in DB.
-- File upload types are restricted and file size is limited.
-
-## Build
-
-Frontend production build:
-
-```bash
-cd frontend
-npm run build
-```
-
-## Known Defaults
-
-- Backend port: `5000`
-- Frontend port: `5173`
-- File size limit: `5MB`
-- Cleanup interval: `60 seconds`
 
 ## Design Decisions
 
-1. Guest-first sharing with optional accounts
-- Core upload/retrieval flows do not require login.
-- Logged-in users get dashboard ownership and tracking.
+1. Link-based access control
+- Content is accessible strictly through generated URLs, avoiding public listing or search.
 
-2. Password protection at link level
-- Link passwords are hashed with bcrypt (`password_hash`) and never stored in plaintext.
-- Password checks are enforced independently from account login.
+2. Guest-first approach
+- Core functionality works without authentication; accounts are optional for tracking links.
 
-3. Usage semantics by content type
-- Text link accesses increment on `GET /api/content/:id`.
-- File accesses increment only on successful `GET /api/download/:id`.
+3. Password protection at link level
+- Link passwords are hashed and validated independently of user authentication.
 
-4. Soft cleanup for expired/consumed files
-- Background job runs every 60 seconds.
-- For file links, expired or limit-reached files are removed from disk.
-- DB row is retained for dashboard history by setting `content = NULL`.
+4. SQLite for persistence
+- Chosen for simplicity, portability, and ease of setup for local development.
 
-5. Simple session persistence
-- Tokens are random IDs stored in `sessions` table.
-- Frontend persists token in `localStorage`.
+5. Asynchronous cleanup job
+- Expiry enforcement is separated from request handling to keep APIs responsive.
 
 ## Assumptions and Limitations
 
-1. Local-development defaults
-- Backend and frontend API URLs are hardcoded to localhost values in frontend code.
-- Backend listens on port `5000` directly.
+1. The application targets local or single-node deployment.
 
-2. Limited production hardening
-- No rate limiting, CAPTCHA, or abuse controls.
-- No CSRF protections needed for current token-header pattern, but broader hardening is not implemented.
+2. File storage is local (no external object storage).
 
-3. Session model
-- Session tokens do not have explicit expiry.
-- A token remains valid until manual logout or database reset.
+3. No rate limiting or abuse prevention is implemented.
 
-4. File handling constraints
-- Max upload size is 5 MB.
-- Allowed MIME types are restricted (images, PDF, ZIP, TXT, DOC, DOCX).
+4. Session tokens do not expire automatically.
 
-5. Database path consistency
-- Current code opens SQLite via relative path in `backend/config/database.js` (`./linkvault.db`).
-- Any `.env` DB path value is currently not used by active server code.
+5. Advanced production hardening is out of scope.
 
-6. Architecture scope
-- API logic is implemented directly in `backend/index.js`.
-- `backend/routes` and `backend/controllers` include older modular code not used by the running server entrypoint.
